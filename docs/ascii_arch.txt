@@ -1,0 +1,13 @@
+Multi-modal Input (Text/Image/Audio/Video)
+  → Native Multi-modal Input Processor
+  → Unified Multi-modal Embedding (Single Token Space)
+  → Hybrid Attention Blocks × N (CSA + HCA alternating)
+     ├── CSA: Compressed Sparse Attention + Lightning Indexer
+     └── HCA: Heavily Compressed Attention + Global Context
+  → Manifold Constrained Residual (mHC)
+  → Layer Normalization
+  → Sparse MoE Expert Layer (1 Shared + 256 Routed, Top-8 per Token)
+  → Thinking Level Controller (Low / Medium / High)
+  → Native Tool Strategy Layer (Plan → Execute → Self-verify)
+  → Final Normalization
+  → LM Head Output
