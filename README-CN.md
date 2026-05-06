@@ -7,7 +7,7 @@ Google 没有公开 Gemini 3.1 Pro 的内部模型架构（层数、注意力类
 公开可知的是 Gemini 的**能力、产品机制、工具使用行为、推理预算控制、系统级交互模式** —— 这些均可通过 Gemini API、Google AI Studio、官方文档和博客观察到。
 
 本项目从这些可观察行为中推理出**行为架构**：要产生所观察到的行为，系统层面必须存在哪些组件。
-内部的层细节（具体层数、MoE 结构、注意力类型、压缩率等）均为**推测性质的玩具实现**，仅用于学习参考，并已明确标注。
+内部的层细节（具体层数、MoE 结构、注意力类型、压缩率等）均为**推测性质的科研实现**，并已明确标注。
 
 ---
 
@@ -20,7 +20,7 @@ Google 没有公开 Gemini 3.1 Pro 的内部模型架构（层数、注意力类
 | `[Observed]` 可直接观察 | 通过 API 行为、黑盒测试、Google AI Studio 使用可直接观察 | Function calling 返回结构化 JSON；thinking_level 参数在 API 中暴露 |
 | `[Reported]` 官方报告 | Google 官方博客、论文、系统卡或可靠媒体报道 | Gemini 技术报告；Google AI 博客关于 Gemini 能力的文章 |
 | `[Inferred]` 合理推断 | 从观察/报告行为中合理推导的系统组件 | 必须存在工具路由器来派发 function call；推理控制器必须门控计算预算 |
-| `[Speculative]` 纯推测 | 纯架构假设 / 玩具实现，仅供学习 | 具体注意力机制（CSA/GCA）、MoE 专家数、隐藏维度、层数 |
+| `[Speculative]` 纯推测 | 纯架构假设 / 推测性实现，用于科研分析 | 具体注意力机制（CSA/GCA）、MoE 专家数、隐藏维度、层数 |
 
 ---
 
@@ -171,7 +171,7 @@ ReasoningBudgetController → ToolRuntime (plan + verify + integrate)
 - **不是** Gemini 内部模型的泄露或逆向源码
 - **不是** Google 训练管线或权重的复现
 - **不是** 声称 Gemini 使用 CSA/HCA、256 专家 MoE 或 mHC 残差
-- **不是** 生产模型 — 纯教育性玩具实现
+- **不是** 生产模型 — 纯推测性科研实现
 
 ---
 
@@ -188,7 +188,7 @@ pip install -r requirements.txt
 ```
 
 ```bash
-# 运行推理演示（验证玩具模型前向传播）
+# 运行推理演示（验证模型前向传播）
 python demo/infer_demo.py
 ```
 

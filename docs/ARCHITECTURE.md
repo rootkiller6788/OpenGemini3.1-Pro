@@ -8,7 +8,7 @@ attention type, MoE structure, activation functions — these are all unknown.
 What IS known: Gemini's observable system behaviors, published capabilities, API-exposed parameters,
 and product-level features. This document infers **behavioral system components** from those public signals.
 Implementation details (CSA/GCA, 40 layers, 256 experts, mHC residual) are **speculative toy designs**
-for educational exploration.
+for research exploration.
 
 ---
 

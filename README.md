@@ -6,7 +6,7 @@ This is **not** a reverse-engineering of Gemini's internal neural network weight
 Google has not publicly disclosed Gemini 3.1 Pro's internal model architecture (layer count, attention type, MoE structure, hidden dimension, etc.).
 What IS publicly known are Gemini's **capabilities, product mechanisms, tool-use behavior, reasoning budget controls, and system-level interaction patterns** — all observable through Gemini API, Google AI Studio, official documentation, and blog posts.
 
-This project infers a **behavioral architecture** from those observables: what system components must likely exist to produce the observed behaviors. Internal layer details (specific layer counts, MoE structure, attention types, compression rates) are **speculative toy implementations** for educational purposes and are labeled accordingly.
+This project infers a **behavioral architecture** from those observables: what system components must likely exist to produce the observed behaviors. Internal layer details (specific layer counts, MoE structure, attention types, compression rates) are **speculative research implementations** and are labeled accordingly.
 
 ---
 
@@ -19,7 +19,7 @@ Every component in this project is tagged with its evidence level:
 | `[Observed]` | Directly observable through API behavior, black-box testing, or Google AI Studio usage | Function calling returns structured JSON; thinking_level parameter exposed in API |
 | `[Reported]` | Stated in official Google blog posts, research papers, system cards, or reliable media | Gemini technical report; Google AI blog posts on Gemini capabilities |
 | `[Inferred]` | Reasonably deduced system components from observed/reported behaviors | A tool router must exist to dispatch function calls; a reasoning controller must gate compute budgets |
-| `[Speculative]` | Pure architectural hypothesis / toy implementation for educational value | Specific attention mechanisms (CSA/GCA), MoE expert count, hidden dimension, layer count |
+| `[Speculative]` | Pure architectural hypothesis / speculative implementation for research | Specific attention mechanisms (CSA/GCA), MoE expert count, hidden dimension, layer count |
 
 ---
 
@@ -170,7 +170,7 @@ Handles thinking level, tool calling, and result integration at the system level
 - **NOT** a leaked or reverse-engineered source of Gemini's internal model
 - **NOT** a reproduction of Google's training pipeline or weights
 - **NOT** a claim that Gemini uses CSA/HCA, 256-expert MoE, or mHC residual
-- **NOT** a production model — purely educational toy implementations
+- **NOT** a production model — purely speculative research implementations
 
 ---
 
