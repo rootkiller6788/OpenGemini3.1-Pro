@@ -4,8 +4,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class SparseMoEGemini(nn.Module):
-    """稀疏MoE专家层（1共享 + 256路由，每Token激活8个）"""
+class SparseMoELayer(nn.Module):
+    """[Speculative] 稀疏 MoE 层 — 1 共享 + N 路由专家
+
+    MoE 是行业常用技术，但 Gemini 是否使用 MoE、专家数量等均未公开。
+    当前为 naive 参考实现：每个 expert 对完整 batch 执行前向计算，
+    即使 mask 为空也会算出，未做负载均衡或容量限制。
+    """
 
     def __init__(self, dim, num_experts=256, shared_experts=1, top_k=8):
         super().__init__()
@@ -43,7 +48,7 @@ class SparseMoEGemini(nn.Module):
         out = torch.zeros_like(x)
         for k in range(self.top_k):
             ei = top_idx[:, :, k]
-            wk = weights[:, :, k : k + 1]
+            wk = weights[:, :, k: k + 1]
             for e in range(self.num_experts):
                 msk = (ei == e).float().unsqueeze(-1)
                 out += msk * wk * self.experts[e](x)

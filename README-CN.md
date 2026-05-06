@@ -1,6 +1,101 @@
-# Gemini 3.1 Pro Architecture Inference
+# Gemini 风格多模态 Agent 架构假设
 
-Gemini 3.1 Pro 完整主模型 — 原生多模态稀疏 MoE 架构的逐层解剖级实现，用于学习和理解模型结构。
+**从公开可观察信号推断 Gemini 的系统级行为架构。**
+
+这是对 Gemini **可观察行为架构**的推理，**不是**对 Gemini 内部神经网络权重或源码的逆向工程。
+Google 没有公开 Gemini 3.1 Pro 的内部模型架构（层数、注意力类型、MoE 结构、隐藏维度等均未公开）。
+公开可知的是 Gemini 的**能力、产品机制、工具使用行为、推理预算控制、系统级交互模式** —— 这些均可通过 Gemini API、Google AI Studio、官方文档和博客观察到。
+
+本项目从这些可观察行为中推理出**行为架构**：要产生所观察到的行为，系统层面必须存在哪些组件。
+内部的层细节（具体层数、MoE 结构、注意力类型、压缩率等）均为**推测性质的玩具实现**，仅用于学习参考，并已明确标注。
+
+---
+
+## 证据层级
+
+本项目中的每个组件均标注其证据级别：
+
+| 标签 | 含义 | 示例来源 |
+|------|------|---------|
+| `[Observed]` 可直接观察 | 通过 API 行为、黑盒测试、Google AI Studio 使用可直接观察 | Function calling 返回结构化 JSON；thinking_level 参数在 API 中暴露 |
+| `[Reported]` 官方报告 | Google 官方博客、论文、系统卡或可靠媒体报道 | Gemini 技术报告；Google AI 博客关于 Gemini 能力的文章 |
+| `[Inferred]` 合理推断 | 从观察/报告行为中合理推导的系统组件 | 必须存在工具路由器来派发 function call；推理控制器必须门控计算预算 |
+| `[Speculative]` 纯推测 | 纯架构假设 / 玩具实现，仅供学习 | 具体注意力机制（CSA/GCA）、MoE 专家数、隐藏维度、层数 |
+
+---
+
+## Gemini 的公开信息
+
+### 能力（来自官方文档、API 和 Google AI Studio）
+
+**[Observed]** 通过 API 和 Google AI Studio 可直接观察：
+- 原生多模态输入（文本、图像、音频、视频）在单一 API 调用中
+- Function calling / 结构化工具使用，支持用户定义 schema
+- 思考级别 / 推理预算控制（low/medium/high）作为 API 参数暴露
+- 长上下文窗口（1M+ tokens）
+- 结构化输出（JSON 模式）
+- 自主工具编排（规划→执行→校验循环）
+
+**[Reported]** 来自 Google 官方来源：
+- Gemini 技术报告（多个版本）
+- Google AI 博客关于 Gemini 架构的文章
+- 多模态处理通过视觉编码器 + 音频编码器 + 文本分词器
+- MoE 是行业已知方向，但 Google 未确认 Gemini 的具体 MoE 架构
+- 后训练 RLHF 对齐
+
+---
+
+## 推断的系统级架构
+
+基于可观察行为，我们推断以下**系统级组件**（未必是模型内部层）：
+
+### 行为数据流
+
+```
+用户输入
+    │
+    ▼
+[Inferred]  多模态前端
+[Observed]  在单一 API 调用中接受文本 + 图像 + 音频 + 视频
+[Reported]  视觉编码器 + 音频编码器 + 文本分词器管线
+    │
+    ├─ 文本分词器 / embedding
+    ├─ 图像编码器 / patch projector
+    ├─ 音频编码器 / 时序 projector
+    └─ 视频编码器 / 帧时序 projector
+    │
+    ▼
+[Inferred]  统一 Token 序列
+[Observed]  所有模态合并到单一上下文窗口
+[Inferred]  模态类型 embedding + 位置/时序编码
+    │
+    ▼
+[Inferred]  长上下文 Transformer 核心
+[Speculative] 局部/滑动窗口注意力
+[Speculative] 全局/压缩记忆注意力
+[Speculative] 稀疏 MoE FFN
+[Speculative] 共享密集 FFN
+[Observed]  1M+ token 上下文支持
+    │
+    ▼
+[Observed]  推理预算控制器
+[Observed]  thinking_level (low/medium/high) 在 API 中暴露
+[Inferred]  基于预算的动态计算分配
+    │
+    ▼
+[Observed]  工具使用运行时
+[Observed]  Function calling 支持结构化 JSON schema
+[Observed]  自主工具编排（规划→执行）
+[Inferred]  规划器 + function call 渲染器 + 观察注入
+    │
+    ▼
+[Inferred]  安全 / 策略运行时
+[Reported]  RLHF 后训练对齐
+[Observed]  安全过滤器在 API 行为中可观察
+    │
+    ▼
+输出
+```
 
 ---
 
@@ -10,105 +105,73 @@ Gemini 3.1 Pro 完整主模型 — 原生多模态稀疏 MoE 架构的逐层解�
 opengemini/
 ├── src/
 │   ├── __init__.py
-│   ├── model.py                  # 完整主模型（串联所有子模块）
+│   ├── model.py                        # ToyGeminiBackbone + GeminiStyleAgentRuntime
 │   └── layers/
-│       ├── __init__.py           # 子模块统一导出
-│       ├── common.py             # LayerNorm 基础组件
-│       ├── embedding.py          # 多模态输入处理 + 统一嵌入
-│       ├── indexer.py            # Lightning Indexer（信息打分筛选）
-│       ├── csa_attention.py      # 压缩稀疏注意力 CSA
-│       ├── hca_attention.py      # 重度压缩注意力 HCA
-│       ├── mhc_residual.py       # 流形约束残差 mHC
-│       ├── moe.py                # 稀疏 MoE（1 共享 + 256 路由）
-│       ├── thinking_ctrl.py      # 思考深度三档控制
-│       └── tool_strategy.py      # 原生工具策略层
+│       ├── __init__.py
+│       ├── common.py                   # [Inferred] LayerNorm
+│       ├── embedding.py                # [Inferred] MultimodalFrontend + UnifiedTokenEncoder
+│       ├── indexer.py                  # [Speculative] LightningIndexer (top-k 打分)
+│       ├── csa_attention.py            # [Speculative] CompressedSparseAttention (4×)
+│       ├── hca_attention.py            # [Speculative] GlobalCompressedAttention (128×)
+│       ├── mhc_residual.py             # [Speculative] ManifoldConstrainedResidual
+│       ├── moe.py                      # [Speculative] SparseMoELayer (naive 参考实现)
+│       ├── thinking_ctrl.py            # [Inferred] ReasoningBudgetController
+│       └── tool_strategy.py            # [Inferred] ToolRuntime (规划+校验)
 ├── demo/
-│   └── infer_demo.py             # 推理演示入口
+│   └── infer_demo.py                   # 前向传播验证
 ├── docs/
-│   ├── ARCHITECTURE.md           # 架构详解
-│   └── ascii_arch.txt            # ASCII 架构图
-├── assets/                       # 架构图（待补充）
+│   ├── ARCHITECTURE.md
+│   └── ascii_arch.txt
+├── assets/
 ├── requirements.txt
 ├── .gitignore
-└── LICENSE
+├── LICENSE
+└── opengemini.txt
 ```
 
 ---
 
-## 如何阅读这个项目
+## 组件证据映射
 
-### 推荐阅读顺序（自底向上）
-
-这个项目按「基础组件 → 子模块 → 主模型」组织，建议按以下顺序阅读：
-
-**第一步：基础组件** — `src/layers/common.py`
-- 只有 `LayerNorm`，是整个模型最底层的基础设施。
-
-**第二步：嵌入层** — `src/layers/embedding.py`
-- `MultiModalUnifiedProcessor`：将文本 / 图像 / 音频 / 视频四路输入分别编码到统一维度（8192），拼接成一个序列。
-- `UnifiedMultimodalEmbedding`：在统一维度空间上叠加 token 嵌入、模态类型嵌入、位置嵌入，形成最终的输入表示。
-- 阅读关键：理解 `forward` 的输入输出 shape 变化，这是模型的第一站。
-
-**第三步：注意力机制** — `src/layers/indexer.py` → `src/layers/csa_attention.py` → `src/layers/hca_attention.py`
-- `LightningIndexer`：给压缩后的 KV 打分，只保留 top-k 个最重要的 token。这是 CSA 的核心依赖。
-- `CSA`（Compressed Sparse Attention）：
-  1. 用 Conv1d 把 KV 按 `compression_rate=4` 压缩（每 4 个 token → 1 个摘要）
-  2. 用 LightningIndexer 从压缩结果中选出 topk 个
-  3. 仅在这 topk 个上做注意力
-- `HCA`（Heavily Compressed Attention）：
-  1. 类似 CSA，但 `compression_rate=128`（极度压缩）
-  2. 不做筛选，直接在全量压缩结果上做注意力，捕捉全局结构
-
-CSA 和 HCA 的对比是阅读重点：前者抓局部关键信息，后者抓全局长程依赖，两者交替使用。
-
-**第四步：残差与 MoE** — `src/layers/mhc_residual.py` → `src/layers/moe.py`
-- `ManifoldConstrainedResidual`：用 Sinkhorn-Knopp 迭代将残差投影到双随机矩阵流形上再做融合。每经过一个注意力块都会走一次 mHC。
-- `SparseMoEGemini`：
-  - 1 个共享专家（所有 token 都过）
-  - 256 个路由专家（每个 token 只激活 top-8 个）
-  - 阅读关键：理解 `gate` 如何决定路由，以及 `for k in range(top_k)` 的循环如何组合专家输出。
-
-**第五步：高层控制** — `src/layers/thinking_ctrl.py` → `src/layers/tool_strategy.py`
-- `ThinkingLevelController`：Low/Medium/High 三档，通过可学习的 level embedding 注入到表示中，控制推理深度。
-- `NativeToolStrategyLayer`：规划 → 校验两阶段，输出 16 种工具的调用计划和校验概率，最后将结果融合回主表示。
-
-**第六步：串联全部** — `src/model.py`
-- `HybridAttentionBlock`：CSA/HCA 的薄封装（Pre-Norm 残差），偶数层用 CSA，奇数层用 HCA。
-- `Gemini31ProFull`：按设计将以上所有模块串联成完整流水线。
+| 组件 | 文件 | 证据级别 | 理由 |
+|------|------|---------|------|
+| 多模态前端 | `embedding.py` | [Inferred] + [Observed] | Gemini API 接受多模态输入；文/图/音/视频处理管线可推断 |
+| 统一 Token 编码 | `embedding.py` | [Inferred] | 任何多模态模型都需要对统一序列做类型+位置编码 |
+| 压缩稀疏注意力 | `csa_attention.py` | [Speculative] | 纯假设；无证据表明 Gemini 使用此机制 |
+| 全局压缩注意力 | `hca_attention.py` | [Speculative] | 纯假设；128× 压缩率为任意选择 |
+| Lightning Indexer | `indexer.py` | [Speculative] | Top-k 选择是常见技术但属此 toy 设计的特定选择 |
+| 流形约束残差 | `mhc_residual.py` | [Speculative] | 有趣的数学构造，无证据 Gemini 使用 Sinkhorn-Knopp 残差 |
+| 稀疏 MoE 层 | `moe.py` | [Speculative] | MoE 是行业常用但 Gemini 的具体 MoE 结构未被确认 |
+| 推理预算控制器 | `thinking_ctrl.py` | [Inferred] + [Observed] | thinking_level 在 API 中暴露；预算机制可推断 |
+| 工具运行时 | `tool_strategy.py` | [Inferred] + [Observed] | Function calling 可观察；规划+校验结构可推断 |
+| LayerNorm | `common.py` | [Inferred] | Transformer 架构中普遍存在 |
 
 ---
 
-## 数据流全景
+## 架构拆分：ToyGeminiBackbone + GeminiStyleAgentRuntime
 
+模型拆分为两个独立关注点：
+
+### ToyGeminiBackbone（纯模型前向）
 ```
-输入（text_ids, img_feat, audio_feat, video_feat,
-      modality_type_ids, pos_ids）
-  │
-  ▼
-MultiModalUnifiedProcessor   —— 四模态 → 统一序列
-  │
-  ▼
-UnifiedMultimodalEmbedding   —— 叠加 token + type + pos embedding
-  │
-  ▼
-┌─ HybridAttentionBlock × 40 ─┐
-│   ├─ CSA (偶数层)             │
-│   └─ HCA (奇数层)             │
-│   └─ mHC 残差（每层）          │
-└──────────────────────────────┘
-  │
-  ▼
-SparseMoEGemini              —— 共享 + top-8 路由专家
-  │
-  ▼
-ThinkingLevelController      —— Low/Medium/High 档位注入
-  │
-  ▼
-NativeToolStrategyLayer      —— 工具规划 + 自校验 + 结果融合
-  │
-  ▼
-LayerNorm → LM Head          —— 最终归一化 → logits 输出
+MultimodalFrontend → UnifiedTokenEncoder → [注意力块 + 残差] → SparseMoE → Norm → LM Head
 ```
+仅负责：text/image/audio/video → hidden → logits。所有具体架构选择均为 `[Speculative]`。
+
+### GeminiStyleAgentRuntime（系统层）
+```
+ReasoningBudgetController → ToolRuntime (plan + verify + integrate)
+```
+处理思考级别、工具调用和结果整合，位于系统层而非嵌入 Transformer 主干内部。
+
+---
+
+## 本项目不是什么
+
+- **不是** Gemini 内部模型的泄露或逆向源码
+- **不是** Google 训练管线或权重的复现
+- **不是** 声称 Gemini 使用 CSA/HCA、256 专家 MoE 或 mHC 残差
+- **不是** 生产模型 — 纯教育性玩具实现
 
 ---
 
@@ -125,43 +188,20 @@ pip install -r requirements.txt
 ```
 
 ```bash
-# 运行推理演示（检查模型能否正常 forward）
+# 运行推理演示（验证玩具模型前向传播）
 python demo/infer_demo.py
 ```
 
 ---
 
-## 关键参数速查
+## 参考文献
 
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| `dim` | 8192 | 模型隐层维度 |
-| `heads` | 64 | 注意力头数 |
-| `head_dim` | 128 | 每头维度 (8192/64) |
-| `num_layers` | 40 | 混合注意力块层数（20 CSA + 20 HCA） |
-| `vocab_size` | 50000 | 词表大小 |
-| `num_experts` | 256 | 路由专家数 |
-| `shared_experts` | 1 | 共享专家数 |
-| `top_k` | 8 | 每 token 激活专家数 |
-| `CSA compression` | 4× | 每 4 token 压缩为 1 个摘要 |
-| `HCA compression` | 128× | 每 128 token 压缩为 1 个摘要 |
-| `topk (Indexer)` | 512 | CSA 保留的 top-k 压缩 token 数 |
-| `n_streams (mHC)` | 4 | 流形约束的并行流数 |
-| `max_pos` | 1M | 最大位置编码长度 |
-| `num_tools` | 16 | 工具策略支持的工具数 |
+### Google 官方来源（公开）
+- Gemini Technical Report (Google DeepMind)
+- Google AI Blog 关于 Gemini 的文章
+- Gemini API 文档
+- Google AI Studio
 
----
-
-## 三模型架构全景对比
-
-| 维度 | GPT-5.5 | Claude Mythos | Gemini 3.1 Pro |
-|------|---------|--------------|----------------|
-| **深度方式** | 48 层堆叠 | RDT 循环（权重复用 12 轮） | 40 层 CSA+HCA 交替 |
-| **注意力** | MLA（潜空间 KV 压缩） | 局部窗口（128） | CSA(4×)+HCA(128×) |
-| **MoE 定位** | 仅专项补强 | 全部 token | 全部 token |
-| **MoE 规模** | 256 专家 / top-7 | 64 专家 / top-2 | 256 专家 / top-8 |
-| **模态融合** | 早期融合（embedding 阶段） | Type embeddings | 后置拼接 |
-| **安全机制** | RLHF 对齐层 | 宪法AI（前+后） | 无 |
-| **工具策略** | 自主调度（LSTM 多步） | 被动（用户指令门控） | 自主（规划→校验） |
-| **维度** | 8192 | 4096 | 8192 |
-| **总层数** | 48 | 1 (循环12轮) | 40 |
+### 外部报道
+- 第三方对 Gemini 模型的基准测试与评估
+- 科技媒体对 Gemini 能力的报道

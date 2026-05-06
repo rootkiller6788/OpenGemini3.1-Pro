@@ -3,51 +3,62 @@ import torch
 import torch.nn as nn
 
 
-class MultiModalUnifiedProcessor(nn.Module):
-    """原生多模态输入处理器（文本/图像/音频/视频四路）"""
+class MultimodalFrontend(nn.Module):
+    """[Speculative] 多模态前端 — 将文本/图像/音频/视频映射到统一维度空间
 
-    def __init__(self):
+    当前仅作为 toy 实现：文本通过 Embedding 查表，非文本模态通过
+    线性投影映射到统一 hidden dimension，然后拼接为单一序列。
+    真实的 Gemini 多模态处理流程未公开。
+    """
+
+    def __init__(self, vocab_size=50000, dim=8192):
         super().__init__()
-        self.img_enc = nn.Sequential(
-            nn.Linear(2048, 8192),
+        self.dim = dim
+        self.text_emb = nn.Embedding(vocab_size, dim)
+        self.image_projector = nn.Sequential(
+            nn.Linear(2048, dim),
             nn.GELU(),
-            nn.Linear(8192, 8192),
+            nn.Linear(dim, dim),
         )
-        self.audio_enc = nn.Sequential(
-            nn.Linear(1024, 8192),
+        self.audio_projector = nn.Sequential(
+            nn.Linear(1024, dim),
             nn.GELU(),
-            nn.Linear(8192, 8192),
+            nn.Linear(dim, dim),
         )
-        self.video_enc = nn.Sequential(
-            nn.Linear(2048, 8192),
+        self.video_projector = nn.Sequential(
+            nn.Linear(2048, dim),
             nn.GELU(),
-            nn.Linear(8192, 8192),
+            nn.Linear(dim, dim),
         )
 
-    def forward(self, text_ids, img_feat, audio_feat, video_feat):
-        B, T_txt = text_ids.shape
+    def forward(self, text_ids, img_feat=None, audio_feat=None, video_feat=None):
+        text_x = self.text_emb(text_ids)
 
-        img = self.img_enc(img_feat).unsqueeze(1)
-        audio = self.audio_enc(audio_feat).unsqueeze(1)
-        video = self.video_enc(video_feat).unsqueeze(1)
+        parts = [text_x]
+        if img_feat is not None:
+            parts.append(self.image_projector(img_feat).unsqueeze(1))
+        if audio_feat is not None:
+            parts.append(self.audio_projector(audio_feat).unsqueeze(1))
+        if video_feat is not None:
+            parts.append(self.video_projector(video_feat).unsqueeze(1))
 
-        x = torch.cat([text_ids, img, audio, video], dim=1)
+        x = torch.cat(parts, dim=1)
         return x
 
 
-class UnifiedMultimodalEmbedding(nn.Module):
-    """统一多模态嵌入层（单Token空间全模态映射）"""
+class UnifiedTokenEncoder(nn.Module):
+    """[Inferred] 统一 Token 编码 — 模态类型 + 位置编码叠加
 
-    def __init__(self, vocab_size, dim=8192):
+    在 MultimodalFrontend 输出之上添加 type embedding（区分文本/图像/音频/视频）
+    和 position encoding。任何多模态模型都需要类似机制。
+    """
+
+    def __init__(self, dim=8192):
         super().__init__()
-        self.text_emb = nn.Embedding(vocab_size, dim)
         self.type_emb = nn.Embedding(4, dim)
         self.pos_emb = nn.Embedding(1024 * 1024, dim)
 
-    def forward(self, token_ids, modality_type_ids, pos_ids):
-        x = (
-            self.text_emb(token_ids)
-            + self.type_emb(modality_type_ids)
-            + self.pos_emb(pos_ids)
-        )
+    def forward(self, x, type_ids, pos_ids):
+        x = x + self.type_emb(type_ids)
+        x = x + self.pos_emb(pos_ids)
         return x

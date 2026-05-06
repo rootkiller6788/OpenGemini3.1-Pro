@@ -6,8 +6,12 @@ import torch.nn.functional as F
 from .indexer import LightningIndexer
 
 
-class CSA(nn.Module):
-    """CSA：压缩稀疏注意力（Compressed Sparse Attention）"""
+class CompressedSparseAttention(nn.Module):
+    """[Speculative] 压缩稀疏注意力 — Conv1d 压缩 KV ×4 + Indexer top-k 筛选
+
+    当前为 naive 参考实现，未针对长上下文优化。
+    CSA 这个具体注意力形式无官方证据，是纯架构假设。
+    """
 
     def __init__(self, dim, heads, compression_rate=4, topk=512):
         super().__init__()
@@ -47,18 +51,18 @@ class CSA(nn.Module):
         k_comp = self.k_compressor(k.reshape(-1, D, T)).reshape(B, self.heads, D, -1)
         v_comp = self.v_compressor(v.reshape(-1, D, T)).reshape(B, self.heads, D, -1)
 
-        B, H, D, Tc = k_comp.shape
-        k_comp_flat = k_comp.transpose(1, 2).reshape(B, D, H * Tc).transpose(1, 2)
-        v_comp_flat = v_comp.transpose(1, 2).reshape(B, D, H * Tc).transpose(1, 2)
-        top_idx, top_w = self.indexer(k_comp_flat)
+        B_, H, D_, Tc = k_comp.shape
+        k_comp_flat = k_comp.transpose(1, 2).reshape(B_, D_, H * Tc).transpose(1, 2)
+        v_comp_flat = v_comp.transpose(1, 2).reshape(B_, D_, H * Tc).transpose(1, 2)
+        top_idx, _ = self.indexer(k_comp_flat)
 
-        k_top = k_comp_flat.gather(1, top_idx.unsqueeze(-1).expand(-1, -1, D))
-        v_top = v_comp_flat.gather(1, top_idx.unsqueeze(-1).expand(-1, -1, D))
+        k_top = k_comp_flat.gather(1, top_idx.unsqueeze(-1).expand(-1, -1, D_))
+        v_top = v_comp_flat.gather(1, top_idx.unsqueeze(-1).expand(-1, -1, D_))
 
-        k_top = k_top.reshape(B, self.heads, self.topk, self.hd).transpose(2, 1)
-        v_top = v_top.reshape(B, self.heads, self.topk, self.hd).transpose(2, 1)
+        k_top = k_top.reshape(B_, self.heads, self.topk, self.hd).transpose(2, 1)
+        v_top = v_top.reshape(B_, self.heads, self.topk, self.hd).transpose(2, 1)
 
-        attn = (q @ k_top.transpose(-2, -1)) / (self.hd**0.5)
+        attn = (q @ k_top.transpose(-2, -1)) / (self.hd ** 0.5)
         attn = F.softmax(attn, dim=-1)
         out = (attn @ v_top).transpose(1, 2).reshape(B, T, D)
         return self.out_proj(out)

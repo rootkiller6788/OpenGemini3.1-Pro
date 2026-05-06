@@ -5,7 +5,10 @@ import torch.nn.functional as F
 
 
 class LightningIndexer(nn.Module):
-    """Lightning Indexer – CSA专用：关键信息打分+筛选"""
+    """[Speculative] 关键信息打分+筛选 — 为压缩注意力选择 top-k 最重要 token
+
+    打分网络为 toy 实现。没有证据表明 Gemini 使用这种 indexer 机制。
+    """
 
     def __init__(self, dim, topk=512):
         super().__init__()

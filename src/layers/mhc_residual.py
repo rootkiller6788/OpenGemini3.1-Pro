@@ -5,7 +5,11 @@ import torch.nn.functional as F
 
 
 class ManifoldConstrainedResidual(nn.Module):
-    """mHC：流形约束残差连接（Manifold Constrained Residual）"""
+    """[Speculative] 流形约束残差连接 — Sinkhorn-Knopp 迭代投影到双随机矩阵流形
+
+    这是一个有趣的数学构造，但没有证据表明 Gemini 使用这种残差机制。
+    纯架构假设 / toy 实现。
+    """
 
     def __init__(self, dim, n_streams=4):
         super().__init__()
